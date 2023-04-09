@@ -23,6 +23,7 @@ with open(args.config, 'r') as f:
 
 env_name = config["env_name"]
 SEED = config["SEED"]
+config["N_SEEDS"] = -1
 total_experience = int(config["total_experience"])
 n_agents = config["n_agents"]
 horizon = config["horizon"]
@@ -31,6 +32,7 @@ minibatch_size = config["minibatch_size"]
 # minibatch_size = n_agents*horizon  # for 1 minibatch per epoch
 assert minibatch_size <= n_agents*horizon
 hidden_layer_sizes = tuple(config["hidden_layer_sizes"])
+activation = config["activation"]
 n_eval_agents = config["n_eval_agents"]
 eval_iter = config["eval_iter"]
 
@@ -42,7 +44,8 @@ n_actions = env.action_space().n
 
 model = NN(hidden_layer_sizes=hidden_layer_sizes, 
            n_actions=n_actions, 
-           single_input_shape=example_state_feature.shape)
+           single_input_shape=example_state_feature.shape,
+           activation=activation)
 
 n_outer_iters = total_experience // (n_agents * horizon)
 n_iters_per_epoch = n_agents*horizon // minibatch_size  # num_minibatches

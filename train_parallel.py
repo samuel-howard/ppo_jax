@@ -21,6 +21,7 @@ with open(args.config, 'r') as f:
 
 env_name = config["env_name"]
 SEED = config["SEED"]
+N_SEEDS = config["N_SEEDS"]
 total_experience = int(config["total_experience"])
 n_agents = config["n_agents"]
 horizon = config["horizon"]
@@ -29,6 +30,7 @@ minibatch_size = config["minibatch_size"]
 # minibatch_size = n_agents*horizon  # for 1 minibatch per epoch
 assert minibatch_size <= n_agents*horizon
 hidden_layer_sizes = tuple(config["hidden_layer_sizes"])
+activation = config["activation"]
 n_eval_agents = config["n_eval_agents"]
 eval_iter = config["eval_iter"]
 
@@ -40,7 +42,8 @@ n_actions = env.action_space().n
 
 model = NN(hidden_layer_sizes=hidden_layer_sizes, 
            n_actions=n_actions, 
-           single_input_shape=example_state_feature.shape)
+           single_input_shape=example_state_feature.shape,
+           activation=activation)
 
 n_outer_iters = total_experience // (n_agents * horizon)
 n_iters_per_epoch = n_agents*horizon // minibatch_size  # num_minibatches
@@ -172,22 +175,22 @@ def train_once(key, clip_epsilon):
 
 if __name__ == "__main__":
     key = jax.random.PRNGKey(SEED)
+    more_keys = jax.random.split(key, N_SEEDS-1)
+    keys = jnp.array([key, *more_keys])
 
-    _, _key = jax.random.split(key)
-    keys = jnp.array([key, _key])
     es = jnp.array([0.2, 0.4, 0.6, 0.8])
 
     result = train_once(keys, es)
     print(result["avg_returns"].shape)
 
-    print("\nReturns avg ± std:")
+    # print("\nReturns avg ± std:")
 
-    for e in range(len(result["steps"][0])):
-        print("E:", es[e])
+    # for e in range(len(result["steps"][0])):
+    #     print("E:", es[e])
 
-        for i in range(len(result["steps"][0, 0])):        
-            exp, step = result["experiences"][0, 0, i], result["steps"][0, 0, i]
-            if jnp.mean(result["std_returns"][:, e, i]) >= 0:
-                avg_return, std_return = result["avg_returns"][:, e, i], result["std_returns"][:, e, i]
-                print(f"(Exp {exp}, steps {step}) --> {avg_return} ± {std_return}")
-        print()
+    #     for i in range(len(result["steps"][0, 0])):        
+    #         exp, step = result["experiences"][0, 0, i], result["steps"][0, 0, i]
+    #         if jnp.mean(result["std_returns"][:, e, i]) >= 0:
+    #             avg_return, std_return = result["avg_returns"][:, e, i], result["std_returns"][:, e, i]
+    #             print(f"(Exp {exp}, steps {step}) --> {avg_return} ± {std_return}")
+    #     print()
