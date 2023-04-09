@@ -9,6 +9,8 @@ from model import NN
 from learning import sample_batch, batch_epoch
 from test import evaluate
 from functools import partial
+from jax.config import config
+config.update("jax_enable_x64", True)  # to ensure vmap/non-vmap consistency
 
 
 parser = argparse.ArgumentParser()
@@ -40,6 +42,14 @@ model = NN(hidden_layer_sizes=hidden_layer_sizes,
            n_actions=n_actions, 
            single_input_shape=example_state_feature.shape)
 
+n_outer_iters = total_experience // (n_agents * horizon)
+n_iters_per_epoch = n_agents*horizon // minibatch_size  # num_minibatches
+n_inner_iters = n_epochs * n_iters_per_epoch 
+
+print("\nState feature shape:", example_state_feature.shape)
+print("Action space:", n_actions)
+print("Minibatches per epoch:", n_iters_per_epoch)
+print("Outer steps:", n_outer_iters, '\n')
 
 ################# CAN VMAP OVER CHOICES OF: #################
 clip_epsilon = config["clip_epsilon"]
@@ -55,6 +65,7 @@ discount = config["discount"]
 eval_discount = config["eval_discount"]
 #############################################################
 
+
 @jax.jit
 @partial(jax.vmap, in_axes=(0, None))
 @partial(jax.vmap, in_axes=(None, 0))
@@ -67,10 +78,6 @@ def train_once(key, clip_epsilon):
 
     key, subkey_model = jax.random.split(key)
     model_params = model.init(subkey_model, jnp.zeros(example_state_feature.shape))
-
-    n_outer_iters = total_experience // (n_agents * horizon)
-    n_iters_per_epoch = n_agents*horizon // minibatch_size  # num_minibatches
-    n_inner_iters = n_epochs * n_iters_per_epoch 
 
     lr = optax.linear_schedule(init_value=lr_begin, 
                                end_value=lr_end, 

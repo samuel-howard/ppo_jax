@@ -24,13 +24,11 @@ def full_return(env: Environment,
                    "key": key,
                    "state_feature": state_feature,
                    "state": state}
-
     def condition_function(val):
         return jnp.logical_not(val["next_is_terminal"])
-
+    
     def body_function(val):
         val["key"], subkey_policy, subkey_mdp = jax.random.split(val["key"], 3)
-
         # (n_actions), (1,)
         policy_log_probs, _ = model.apply(model_params, val["state_feature"])
         policy_probs = jnp.exp(policy_log_probs)

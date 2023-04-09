@@ -12,42 +12,27 @@ import datetime
 from model import NN
 from learning import sample_batch, batch_epoch
 from test import evaluate
-
+from jax.config import config
+config.update("jax_enable_x64", True)  # to ensure vmap/non-vmap consistency
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, required=True, help='JSON file path')
 args = parser.parse_args()
 with open(args.config, 'r') as f:
     config = json.load(f)
+
 env_name = config["env_name"]
 SEED = config["SEED"]
 total_experience = int(config["total_experience"])
-
-
-
-lr_begin = config["lr_begin"]
-lr_end = config["lr_end"]
 n_agents = config["n_agents"]
 horizon = config["horizon"]
 n_epochs = config["n_epochs"]
 minibatch_size = config["minibatch_size"]
 # minibatch_size = n_agents*horizon  # for 1 minibatch per epoch
-hidden_layer_sizes = tuple(config["hidden_layer_sizes"])
-normalize_advantages = config["normalize_advantages"]
-anneal = config["anneal_epsilon"]
-clip_epsilon = config["clip_epsilon"]
-entropy_coeff = config["entropy_coeff"]
-val_loss_coeff = config["val_loss_coeff"]
-clip_grad = config["clip_grad"]
-discount = config["discount"]
-gae_lambda = config["gae_lambda"]
-n_eval_agents = config["n_eval_agents"]
-eval_discount = config["eval_discount"]
-eval_iter = config["eval_iter"]
 assert minibatch_size <= n_agents*horizon
-wandb.init(project="ppo", 
-           config=config,
-           name=env_name+'-'+datetime.datetime.now().strftime("%d.%m-%H:%M"))
+hidden_layer_sizes = tuple(config["hidden_layer_sizes"])
+n_eval_agents = config["n_eval_agents"]
+eval_iter = config["eval_iter"]
 
 env, env_params = gymnax.make(env_name)
 vecEnv_reset = jax.vmap(env.reset, in_axes=(0,))
@@ -58,19 +43,36 @@ n_actions = env.action_space().n
 model = NN(hidden_layer_sizes=hidden_layer_sizes, 
            n_actions=n_actions, 
            single_input_shape=example_state_feature.shape)
-print("\nState feature shape:", example_state_feature.shape)
-print("Action space:", n_actions)
-
-key = jax.random.PRNGKey(SEED)
-key, subkey_model = jax.random.split(key)
-model_params = model.init(subkey_model, jnp.zeros(example_state_feature.shape))
 
 n_outer_iters = total_experience // (n_agents * horizon)
 n_iters_per_epoch = n_agents*horizon // minibatch_size  # num_minibatches
 n_inner_iters = n_epochs * n_iters_per_epoch 
 
+clip_epsilon = config["clip_epsilon"]
+entropy_coeff = config["entropy_coeff"]
+val_loss_coeff = config["val_loss_coeff"]
+clip_grad = config["clip_grad"]
+gae_lambda = config["gae_lambda"]
+lr_begin = config["lr_begin"]
+lr_end = config["lr_end"]
+anneal = config["anneal_epsilon"]
+normalize_advantages = config["normalize_advantages"]
+discount = config["discount"]
+eval_discount = config["eval_discount"]
+
+print("\nState feature shape:", example_state_feature.shape)
+print("Action space:", n_actions)
 print("Minibatches per epoch:", n_iters_per_epoch)
 print("Outer steps:", n_outer_iters, '\n')
+wandb.init(project="ppo", 
+           config=config,
+           name=env_name+'-'+datetime.datetime.now().strftime("%d.%m-%H:%M"))
+
+
+key = jax.random.PRNGKey(SEED)
+
+key, subkey_model = jax.random.split(key)
+model_params = model.init(subkey_model, jnp.zeros(example_state_feature.shape))
 
 lr = optax.linear_schedule(init_value=lr_begin, 
                            end_value=lr_end, 
