@@ -184,35 +184,18 @@ if __name__ == "__main__":
     # VMAP OVER:
     hparams = OrderedDict({"keys": jnp.array([key, *jax.random.split(key, N_SEEDS-1)]), 
                            "clip": jnp.array([0.1, 0.2, 0.4, 0.5, 0.6, 0.7])})
-    
+
     # Train:
     result = train_once(*hparams.values())
-    print(result["avg_returns"].shape)
-
-
-
-    # print("\nReturns avg ± std:")
-    # for e in range(len(result["steps"][0])):
-    #     print("E:", es[e])
-
-    #     for i in range(len(result["steps"][0, 0])):        
-    #         exp, step = result["experiences"][0, 0, i], result["steps"][0, 0, i]
-    #         if jnp.mean(result["std_returns"][:, e, i]) >= 0:
-    #             avg_return, std_return = result["avg_returns"][:, e, i], result["std_returns"][:, e, i]
-    #             print(f"(Exp {exp}, steps {step}) --> {avg_return} ± {std_return}")
-    #     print()
-
+    print("Done. Result shape:", result["avg_returns"].shape)
 
     # Log to wandb:
-
-    assert len(hparams) == 2
-
     wandb.init(project="ppo", 
                config=config,
                name=env_name+'-'+datetime.datetime.now().strftime("%d.%m-%H:%M"))
-    
     hparam_names = list(hparams.keys())
 
+    assert len(hparams) == 2
     name = hparam_names[1]
     vals = hparams[name]
     for step in range(len(result["experiences"][0, 0, :]) - 1):
@@ -242,6 +225,19 @@ if __name__ == "__main__":
                                                 "avg+std": avg_return + std_return,
                                                 "avg-std": avg_return - std_return}}, result["experiences"][0, 0, -1])
 
+    # print("\nReturns avg ± std:")
+    # for e in range(len(result["steps"][0])):
+    #     print("E:", es[e])
+
+    #     for i in range(len(result["steps"][0, 0])):        
+    #         exp, step = result["experiences"][0, 0, i], result["steps"][0, 0, i]
+    #         if jnp.mean(result["std_returns"][:, e, i]) >= 0:
+    #             avg_return, std_return = result["avg_returns"][:, e, i], result["std_returns"][:, e, i]
+    #             print(f"(Exp {exp}, steps {step}) --> {avg_return} ± {std_return}")
+    #     print()
+
+
+
     # import plotly.graph_objs as go
     # table = wandb.Table(columns=list(range(len(hparams["clip_epsilons"]))))
 
@@ -260,8 +256,8 @@ if __name__ == "__main__":
     # table.add_data(*data)
     # run.log({"xyz": table})
 
-
     wandb.finish()
+
 
 
 
