@@ -102,9 +102,9 @@ for outer_iter in tqdm(range(n_outer_iters)):
         returns = evaluate(env, key_eval, model_params, model, n_actions, n_eval_agents, eval_discount)
         avg_return, std_return = jnp.mean(returns), jnp.std(returns)
         evals[experience, steps] = (avg_return, std_return)
-        wandb.log({"Returns/avg": avg_return,
-                   "Returns/avg+std": avg_return + std_return,
-                   "Returns/avg-std": avg_return - std_return}, experience)
+        wandb.log({"Return/avg": avg_return,
+                   "Return/avg+std": avg_return + std_return,
+                   "Return/avg-std": avg_return - std_return}, experience)
         
     agents_stateFeature, agents_state, batch, key = sample_batch(agents_stateFeature,
                                                                  agents_state,
@@ -143,22 +143,22 @@ for outer_iter in tqdm(range(n_outer_iters)):
                                                     clip_epsilon*alpha)
                 
     new_experience = experience + (n_agents*horizon)
-    wandb.log({"Losses/total": np.mean(minibatch_losses)}, new_experience)
-    wandb.log({"Losses/ppo": np.mean(ppo_losses)}, new_experience)
-    wandb.log({"Losses/val": np.mean(val_losses)}, new_experience)
-    wandb.log({"Losses/ent": np.mean(ent_bonuses)}, new_experience)
+    wandb.log({"Loss/total": np.mean(minibatch_losses)}, new_experience)
+    wandb.log({"Loss/ppo": np.mean(ppo_losses)}, new_experience)
+    wandb.log({"Loss/val": np.mean(val_losses)}, new_experience)
+    wandb.log({"Loss/ent": np.mean(ent_bonuses)}, new_experience)
+
     wandb.log({"Debug/%clip_trig": 100*np.mean(clip_trigger_fracs)}, new_experience)
     wandb.log({"Debug/approx_kl": np.mean(approx_kls)}, new_experience)
-    wandb.log({"Debug/clip_epsilon": clip_epsilon*alpha}, new_experience)
 
 # One more eval
 _, key_eval = jax.random.split(key)
 returns = evaluate(env, key_eval, model_params, model, n_actions, n_eval_agents, eval_discount)
 avg_return, std_return = jnp.mean(returns), jnp.std(returns)
 evals[new_experience, steps+1] = (avg_return, std_return)
-wandb.log({"Returns/avg": avg_return,
-           "Returns/avg+std": avg_return + std_return,
-           "Returns/avg-std": avg_return - std_return}, new_experience)
+wandb.log({"Return/avg": avg_return,
+           "Return/avg+std": avg_return + std_return,
+           "Return/avg-std": avg_return - std_return}, new_experience)
 
 
 print("\nReturns avg ± std:")

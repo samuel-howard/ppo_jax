@@ -2,6 +2,7 @@ import gymnax
 import jax
 import optax
 import jax.numpy as jnp
+import numpy as np
 from flax.training.checkpoints import save_checkpoint
 import argparse
 import json
@@ -115,7 +116,7 @@ def train_once(key, clip_epsilon):
             return -1.0, -1.0, carry["key"]
         
         append_to = dict()
-        append_to["steps"], append_to["experiences"] = idx, idx*n_agents*horizon
+        append_to["experiences"] = idx*n_agents*horizon
         append_to["avg_returns"], append_to["std_returns"], key = jax.lax.cond(idx % eval_iter == 0, f_true, f_false, carry)
 
         carry["agents_stateFeature"], carry["agents_state"], batch, key = sample_batch(carry["agents_stateFeature"],
@@ -170,7 +171,6 @@ def train_once(key, clip_epsilon):
     _, key_eval = jax.random.split(carry["key"])
     returns = evaluate(env, key_eval, carry["model_params"], model, n_actions, n_eval_agents, eval_discount)
     avg_return, std_return = jnp.mean(returns), jnp.std(returns)
-    result["steps"] = jnp.append(result["steps"], result["steps"][-1] + 1)    
     result["experiences"] = jnp.append(result["experiences"], result["experiences"][-1] + n_agents*horizon)
     result["avg_returns"] = jnp.append(result["avg_returns"], avg_return)
     result["std_returns"] = jnp.append(result["std_returns"], std_return)
@@ -182,76 +182,13 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(SEED)
 
     # VMAP OVER:
-    hparams = {"keys": jnp.array([key, *jax.random.split(key, N_SEEDS-1)]), 
-               "clip_epsilons": jnp.array([0.1, 0.2, 0.4, 0.5, 0.6, 0.7])}
+    hparams = OrderedDict({"keys": jnp.array([key, *jax.random.split(key, N_SEEDS-1)]), 
+                           "clip": jnp.array([0.1, 0.2, 0.4, 0.5, 0.6, 0.7])})
     
     # Train:
     result = train_once(*hparams.values())
     print(result["avg_returns"].shape)
 
-    # Log to wandb:
-    run = wandb.init(project="ppo", 
-            config=config,
-            name=env_name+'-'+datetime.datetime.now().strftime("%d.%m-%H:%M"))
-    
-    experiences = result["experiences"][0, 0, :]
-    if len(hparams) == 2:
-        for i1 in range(hparams[])
-
-    else:
-        raise NotImplementedError
-
-
-    for e in range(len(hparams["clip_epsilons"])):
-        print(experiences.shape, result["approx_kls"][:, e, :].shape)
-        # wandb.log({"weather_sample" : wandb.plot.line_series(
-        # xs=experiences,
-        # ys=result["avg_returns"][:, e, :],
-        # keys=np.arange(N_SEEDS  ),
-        # title="Weather Metrics")})
-
-    # print(result["approx_kls"][:, 0, :])
-
-    # wandb.log({"weather_sample" : wandb.plot.line_series(
-    # xs=np.array(experiences),
-    # ys=np.array(result["approx_kls"][:, 0, :]),
-    # keys=np.arange(N_SEEDS),
-    # title="Weather Metrics")})
-
-    import numpy as np
-    import plotly.graph_objs as go
-
-
-    table = wandb.Table(columns=list(range(len(hparams["clip_epsilons"]))))
-
-    data = []
-    for e in range(len(hparams["clip_epsilons"])):
-
-        fig = go.Figure([
-                go.Scatter(name="mean", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0), mode="lines"),
-                go.Scatter(name="mean+std", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0)+np.std(result["approx_kls"][:, e, :], axis=0), mode="lines", line=dict(width=0), showlegend=False),
-                go.Scatter(name="mean-std", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0)-np.std(result["approx_kls"][:, e, :], axis=0), mode="lines", line=dict(width=0), fill="tonexty", showlegend=False)
-                ])
-        path_to_plotly_html = "./plotly_figure.html"
-        fig.write_html(path_to_plotly_html, auto_play=False)
-        data.append(wandb.Html(path_to_plotly_html))
-
-    table.add_data(*data)
-    run.log({"xyz": table})
-
-
-    wandb.finish()
-
-
-    # for e in range(len(result["steps"][0])):
-    #     print("E:", es[e])
-
-    #     for i in range(len(result["steps"][0, 0])):        
-    #         exp, step = result["experiences"][0, 0, i], result["steps"][0, 0, i]
-    #         if jnp.mean(result["std_returns"][:, e, i]) >= 0:
-    #             avg_return, std_return = result["avg_returns"][:, e, i], result["std_returns"][:, e, i]
-    #             print(f"(Exp {exp}, steps {step}) --> {avg_return} ± {std_return}")
-    #     print()
 
 
     # print("\nReturns avg ± std:")
@@ -264,3 +201,67 @@ if __name__ == "__main__":
     #             avg_return, std_return = result["avg_returns"][:, e, i], result["std_returns"][:, e, i]
     #             print(f"(Exp {exp}, steps {step}) --> {avg_return} ± {std_return}")
     #     print()
+
+
+    # Log to wandb:
+
+    assert len(hparams) == 2
+
+    wandb.init(project="ppo", 
+               config=config,
+               name=env_name+'-'+datetime.datetime.now().strftime("%d.%m-%H:%M"))
+    
+    hparam_names = list(hparams.keys())
+
+    name = hparam_names[1]
+    vals = hparams[name]
+    for step in range(len(result["experiences"][0, 0, :]) - 1):
+        experience = result["experiences"][0, 0, step]
+        
+        for j in range(len(result["experiences"][0, :])):
+            wandb.log({f"{name}={vals[j]}/Loss": {"total": np.mean(result["minibatch_losses"][:, j, step], axis=0),
+                                                  "ppo": np.mean(result["ppo_losses"][:, j, step], axis=0),
+                                                  "val": np.mean(result["val_losses"][:, j, step], axis=0),
+                                                  "ent": np.mean(result["ent_bonuses"][:, j, step], axis=0)}}, experience)
+
+            wandb.log({f"{name}={vals[j]}/Debug": {"%clip_trig": 100*np.mean(result["clip_trigger_fracs"][:, j, step], axis=0),
+                                                   "approx_kl": np.mean(result["approx_kls"][:, j, step], axis=0)}}, experience)
+
+            if result["std_returns"][0, j, step] > 0:
+                avg_return = np.mean(result["avg_returns"][:, j, step], axis=0)
+                std_return = np.std(result["avg_returns"][:, j, step], axis=0)
+                wandb.log({f"{name}={vals[j]}/Return": {"avg": avg_return,
+                                                        "avg+std": avg_return + std_return,
+                                                        "avg-std": avg_return - std_return}}, experience)
+
+    for j in range(len(result["experiences"][0, :])):
+        assert result["std_returns"][0, j, -1] > 0
+        avg_return = np.mean(result["avg_returns"][:, j, -1], axis=0)
+        std_return = np.std(result["avg_returns"][:, j, -1], axis=0)
+        wandb.log({f"{name}={vals[j]}/Return": {"avg": avg_return,
+                                                "avg+std": avg_return + std_return,
+                                                "avg-std": avg_return - std_return}}, result["experiences"][0, 0, -1])
+
+    # import plotly.graph_objs as go
+    # table = wandb.Table(columns=list(range(len(hparams["clip_epsilons"]))))
+
+    # data = []
+    # for e in range(len(hparams["clip_epsilons"])):
+
+    #     fig = go.Figure([
+    #             go.Scatter(name="mean", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0), mode="lines"),
+    #             go.Scatter(name="mean+std", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0)+np.std(result["approx_kls"][:, e, :], axis=0), mode="lines", line=dict(width=0), showlegend=False),
+    #             go.Scatter(name="mean-std", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0)-np.std(result["approx_kls"][:, e, :], axis=0), mode="lines", line=dict(width=0), fill="tonexty", showlegend=False)
+    #             ])
+    #     path_to_plotly_html = "./plotly_figure.html"
+    #     fig.write_html(path_to_plotly_html, auto_play=False)
+    #     data.append(wandb.Html(path_to_plotly_html))
+
+    # table.add_data(*data)
+    # run.log({"xyz": table})
+
+
+    wandb.finish()
+
+
+
