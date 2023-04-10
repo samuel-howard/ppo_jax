@@ -5,6 +5,9 @@ import jax.numpy as jnp
 from flax.training.checkpoints import save_checkpoint
 import argparse
 import json
+import wandb
+import datetime
+from collections import OrderedDict
 from model import NN
 from learning import sample_batch, batch_epoch
 from test import evaluate
@@ -47,12 +50,13 @@ model = NN(hidden_layer_sizes=hidden_layer_sizes,
 
 n_outer_iters = total_experience // (n_agents * horizon)
 n_iters_per_epoch = n_agents*horizon // minibatch_size  # num_minibatches
-n_inner_iters = n_epochs * n_iters_per_epoch 
+n_inner_iters = n_epochs * n_iters_per_epoch
 
 print("\nState feature shape:", example_state_feature.shape)
 print("Action space:", n_actions)
 print("Minibatches per epoch:", n_iters_per_epoch)
 print("Outer steps:", n_outer_iters, '\n')
+
 
 ################# CAN VMAP OVER CHOICES OF: #################
 clip_epsilon = config["clip_epsilon"]
@@ -70,6 +74,7 @@ eval_discount = config["eval_discount"]
 
 
 @jax.jit
+# @partial(jax.vmap, in_axes=(0,))
 @partial(jax.vmap, in_axes=(0, None))
 @partial(jax.vmap, in_axes=(None, 0))
 # @partial(jax.vmap, in_axes=(0, None, None))
@@ -173,18 +178,83 @@ def train_once(key, clip_epsilon):
     return result
     
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     key = jax.random.PRNGKey(SEED)
-    more_keys = jax.random.split(key, N_SEEDS-1)
-    keys = jnp.array([key, *more_keys])
 
-    es = jnp.array([0.2, 0.4, 0.6, 0.8])
-
-    result = train_once(keys, es)
+    # VMAP OVER:
+    hparams = {"keys": jnp.array([key, *jax.random.split(key, N_SEEDS-1)]), 
+               "clip_epsilons": jnp.array([0.1, 0.2, 0.4, 0.5, 0.6, 0.7])}
+    
+    # Train:
+    result = train_once(*hparams.values())
     print(result["avg_returns"].shape)
 
-    # print("\nReturns avg ± std:")
+    # Log to wandb:
+    run = wandb.init(project="ppo", 
+            config=config,
+            name=env_name+'-'+datetime.datetime.now().strftime("%d.%m-%H:%M"))
+    
+    experiences = result["experiences"][0, 0, :]
+    if len(hparams) == 2:
+        for i1 in range(hparams[])
 
+    else:
+        raise NotImplementedError
+
+
+    for e in range(len(hparams["clip_epsilons"])):
+        print(experiences.shape, result["approx_kls"][:, e, :].shape)
+        # wandb.log({"weather_sample" : wandb.plot.line_series(
+        # xs=experiences,
+        # ys=result["avg_returns"][:, e, :],
+        # keys=np.arange(N_SEEDS  ),
+        # title="Weather Metrics")})
+
+    # print(result["approx_kls"][:, 0, :])
+
+    # wandb.log({"weather_sample" : wandb.plot.line_series(
+    # xs=np.array(experiences),
+    # ys=np.array(result["approx_kls"][:, 0, :]),
+    # keys=np.arange(N_SEEDS),
+    # title="Weather Metrics")})
+
+    import numpy as np
+    import plotly.graph_objs as go
+
+
+    table = wandb.Table(columns=list(range(len(hparams["clip_epsilons"]))))
+
+    data = []
+    for e in range(len(hparams["clip_epsilons"])):
+
+        fig = go.Figure([
+                go.Scatter(name="mean", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0), mode="lines"),
+                go.Scatter(name="mean+std", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0)+np.std(result["approx_kls"][:, e, :], axis=0), mode="lines", line=dict(width=0), showlegend=False),
+                go.Scatter(name="mean-std", x=np.array(experiences), y=np.mean(result["approx_kls"][:, e, :], axis=0)-np.std(result["approx_kls"][:, e, :], axis=0), mode="lines", line=dict(width=0), fill="tonexty", showlegend=False)
+                ])
+        path_to_plotly_html = "./plotly_figure.html"
+        fig.write_html(path_to_plotly_html, auto_play=False)
+        data.append(wandb.Html(path_to_plotly_html))
+
+    table.add_data(*data)
+    run.log({"xyz": table})
+
+
+    wandb.finish()
+
+
+    # for e in range(len(result["steps"][0])):
+    #     print("E:", es[e])
+
+    #     for i in range(len(result["steps"][0, 0])):        
+    #         exp, step = result["experiences"][0, 0, i], result["steps"][0, 0, i]
+    #         if jnp.mean(result["std_returns"][:, e, i]) >= 0:
+    #             avg_return, std_return = result["avg_returns"][:, e, i], result["std_returns"][:, e, i]
+    #             print(f"(Exp {exp}, steps {step}) --> {avg_return} ± {std_return}")
+    #     print()
+
+
+    # print("\nReturns avg ± std:")
     # for e in range(len(result["steps"][0])):
     #     print("E:", es[e])
 

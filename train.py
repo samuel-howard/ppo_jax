@@ -67,6 +67,7 @@ print("\nState feature shape:", example_state_feature.shape)
 print("Action space:", n_actions)
 print("Minibatches per epoch:", n_iters_per_epoch)
 print("Outer steps:", n_outer_iters, '\n')
+
 wandb.init(project="ppo", 
            config=config,
            name=env_name+'-'+datetime.datetime.now().strftime("%d.%m-%H:%M"))
